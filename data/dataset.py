@@ -6,7 +6,7 @@ from PIL import Image
 from torch.utils import data
 from torchvision import transforms
 
-from utils import sampler
+from utils import SarSampler
 
 
 class SAR(data.Dataset):
@@ -29,10 +29,16 @@ class SAR(data.Dataset):
         self.sar_file = self.sar_file[0]
         self.lbl_file = self.lbl_file[0]
 
-        self.crops = sampler.SarSampler(lbl_file=self.lbl_file, kernel=kernel, stride=stride).get_crops()
+        self.crops = SarSampler(lbl_file=self.lbl_file, kernel=kernel, stride=stride).get_crops()
 
         self.sar_tif = np.array(Image.open(self.sar_file))
-        self.lbl_tif = np.array(Image.open(self.lbl_file))
+        self.lbl_tif = np.array(Image.open(self.lbl_file), dtype=np.int64)
+
+        self.lbl_tif[self.lbl_tif == 21] = 1
+        self.lbl_tif[self.lbl_tif == 31] = 2
+        self.lbl_tif[self.lbl_tif == 41] = 3
+        self.lbl_tif[self.lbl_tif == 51] = 4
+        self.lbl_tif[self.lbl_tif == -999] = 5
 
         self.transform = transforms.Compose([
             transforms.ToTensor()
