@@ -1,17 +1,11 @@
-
-
-
-
 import argparse
-import logging
+# import logging
 import os
 
-import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils import data
 from tqdm import tqdm
-
 
 from data import SAR
 from segment import DeconvNet
@@ -63,14 +57,20 @@ device = torch.device('cuda:0' if cuda else 'cpu')
 tqdm.write('CUDA is not available!' if not cuda else 'CUDA is available!')
 tqdm.write('')
 
-maps = ['Vancouver']
+maps = ['Montreal', 'Ottawa', 'Quebec', 'Saskatoon', 'Vancouver']
 
-train_dataset = SAR(root_dir=os.path.join(root_dir, maps[0]), kernel=(224, 224), stride=(32, 32))
+train_maps = [maps[0]]
+valid_maps = [maps[4]]
+
+train_root = os.path.join(root_dir, train_maps[0])
+valid_root = os.path.join(root_dir, valid_maps[0])
+
+train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192))
+valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192))
 
 train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-devel_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-# model = models.resnet101(pretrained=False, num_classes=num_classes).to(device)
 model = DeconvNet(num_classes=num_classes).to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
@@ -83,7 +83,7 @@ def iterate(ep, mode):
         loader = train_loader
     else:
         model.eval()
-        loader = devel_loader
+        loader = valid_loader
     num_samples = 0
     run_loss = 0.
     run_acc = 0.
@@ -95,7 +95,7 @@ def iterate(ep, mode):
         outputs = model(sar)
 
         _, seg = torch.max(outputs.data, 1)
-        loss = criterion(outputs, lbl)
+        loss = criterion(outputs, lbl.long())
 
         num_samples += lbl.size(0)
         run_loss += loss.item() * lbl.size(0)
@@ -119,9 +119,9 @@ if __name__ == "__main__":
     for epoch in range(num_epochs):
         accuracy = iterate(epoch, 'train')
         tqdm.write(f'Train | Epoch {epoch} | Accuracy {accuracy}')
-        # with torch.no_grad():
-        #     accuracy = iterate(epoch, 'devel')
-        #     if accuracy >= best_acc:
-        #         best_acc = accuracy
-        #         best_ep = epoch
-        #     tqdm.write(f'Devel | Epoch {epoch} | Accuracy {accuracy} | Best Accuracy {best_acc} | Best Epoch {best_ep}')
+        with torch.no_grad():
+            accuracy = iterate(epoch, 'valid')
+            if accuracy >= best_acc:
+                best_acc = accuracy
+                best_ep = epoch
+            tqdm.write(f'Valid | Epoch {epoch} | Accuracy {accuracy} | Best Accuracy {best_acc} | Best Epoch {best_ep}')
