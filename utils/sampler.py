@@ -10,7 +10,7 @@ Image.MAX_IMAGE_PIXELS = None
 
 
 class SarSampler:
-    def __init__(self, lbl_file, kernel, stride, min_classes=2, max_count=0.8):
+    def __init__(self, lbl_file, kernel, stride, min_classes, max_count):
         assert len(kernel) == 2, 'argument "kernel" must be of size 2'
         assert len(stride) == 2, 'argument "stride" must be of size 2'
 
@@ -60,8 +60,12 @@ class SarSampler:
         for i, (m_class, m_count) in enumerate(class_count):
             # First condition selects crops containing at least 2 different classes
             # Second condition selects crops containing at least 1:48 pixels of each class
-            if m_class.size >= self.min_classes and (m_class != 0).all() and (m_count <= self.count_thr).all():
-                self.selected.append({"crop": crops[i], "classes": m_class, "pixels": m_count})
+            if self.min_classes > 1:
+                if m_class.size >= self.min_classes and (m_class != 0).all() and (m_count <= self.count_thr).all():
+                    self.selected.append({"crop": crops[i], "classes": m_class, "pixels": m_count})
+            else:
+                if (m_class != 0).all():
+                    self.selected.append({"crop": crops[i], "classes": m_class, "pixels": m_count})
 
         # new params for multiprocessing
         # num_processes = 2

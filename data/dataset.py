@@ -10,7 +10,7 @@ from utils import SarSampler
 
 
 class SAR(data.Dataset):
-    def __init__(self, root_dir, kernel=(224, 224), stride=(224, 224)):
+    def __init__(self, root_dir, kernel=(224, 224), stride=(224, 224), min_classes=2, max_count=0.8):
         assert len(kernel) == 2, 'argument "kernel" must be of size 2'
         assert len(stride) == 2, 'argument "stride" must be of size 2'
 
@@ -29,7 +29,11 @@ class SAR(data.Dataset):
         self.sar_file = self.sar_file[0]
         self.lbl_file = self.lbl_file[0]
 
-        self.crops = SarSampler(lbl_file=self.lbl_file, kernel=kernel, stride=stride).get_crops()
+        self.crops = SarSampler(lbl_file=self.lbl_file,
+                                kernel=kernel,
+                                stride=stride,
+                                min_classes=min_classes,
+                                max_count=max_count).get_crops()
 
         self.sar_tif = np.array(Image.open(self.sar_file))
         self.lbl_tif = np.array(Image.open(self.lbl_file), dtype=np.int8)

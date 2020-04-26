@@ -1,5 +1,5 @@
 import argparse
-# import logging
+import logging
 import os
 
 import torch
@@ -12,7 +12,7 @@ from segment import DeconvNet
 
 parser = argparse.ArgumentParser(description='DeepSAR | Land Classification for SAR imagery using Deep Learning')
 parser.add_argument('dir', help='path to directory containing SAR raster directories')
-# parser.add_argument('--log_dir', required=True, help='path to directory to store the results')
+parser.add_argument('--log_dir', required=True, help='path to directory to store the results')
 # parser.add_argument('--load_dir', default='', help='path to pre-trained model parameters')
 parser.add_argument('--batch_size', default=16, type=int, help='batch size')
 parser.add_argument('--num_workers', default=4, type=int, help='number of dataloader workers')
@@ -22,9 +22,9 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='l2 regular
 parser.add_argument('--scheduler_step_size', default=25, type=int, help='scheduler step size')
 parser.add_argument('--scheduler_gamma', default=0.1, type=float, help='scheduler gamma')
 parser.add_argument('--num_classes', default=6, type=int, help='output dimension')
-parser.add_argument('--resize', default=224, type=int, help='resize images in pixels')
-# parser.add_argument('--xscale', default=4, type=int, help='scaling for temporal dim')
-# parser.add_argument('--yscale', default=4, type=int, help='scaling for spatial dim')
+parser.add_argument('--train_map', default=0, type=int, help='index of train map')
+parser.add_argument('--valid_map', default=4, type=int, help='index of valid map')
+# parser.add_argument('--resize', default=224, type=int, help='resize images in pixels')
 # parser.add_argument('--random_seed', default=42, type=int, help='fix the random seed for reproducibility')
 # parser.add_argument('--normalize_labels', action='store_true', help='zero-one normalization applied to labels')
 # parser.add_argument('--pretrained', action='store_true', help='load pre-trained model from load_dir')
@@ -33,7 +33,7 @@ args = parser.parse_args()
 cuda = torch.cuda.is_available()
 
 root_dir = args.dir
-# log_dir = args.log_dir
+log_dir = args.log_dir
 # load_dir = args.load_dir
 batch_size = args.batch_size
 num_workers = args.num_workers
@@ -43,9 +43,9 @@ weight_decay = args.weight_decay
 scheduler_step_size = args.scheduler_step_size
 scheduler_gamma = args.scheduler_gamma
 num_classes = args.num_classes
-resize = args.resize
-# xscale = args.xscale
-# yscale = args.yscale
+train_map = args.train_map
+valid_map = args.valid_map
+# resize = args.resize
 # random_seed = args.random_seed
 
 # torch.manual_seed(random_seed)
@@ -59,14 +59,31 @@ tqdm.write('')
 
 maps = ['Montreal', 'Ottawa', 'Quebec', 'Saskatoon', 'Vancouver']
 
-train_maps = [maps[0]]
-valid_maps = [maps[4]]
+assert train_map < len(maps), f'Train map index must be between 0 and {len(maps)}'
+assert valid_map < len(maps), f'Valid map index must be between 0 and {len(maps)}'
+
+# ### LOGGING ###
+log_pad = 96
+log_file = maps[train_map] + '_' + maps[valid_map] + '.txt'
+logging.basicConfig(filename=os.path.join(log_dir, log_file),
+                    filemode='w',
+                    format='%(asctime)s, %(name)s - %(message)s',
+                    datefmt='%D - %H:%M:%S',
+                    level=logging.INFO)
+# ### LOGGING ###
+
+train_maps = [maps[train_map]]
+valid_maps = [maps[valid_map]]
 
 train_root = os.path.join(root_dir, train_maps[0])
 valid_root = os.path.join(root_dir, valid_maps[0])
 
-train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192))
-valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192))
+print(f'*** Setting up TRAIN dataset using {maps[train_map]} raster ***')
+train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192), min_classes=1, max_count=0.8)
+print('**************************************************************\n')
+print(f'*** Setting up VALID dataset using {maps[valid_map]} raster ***')
+valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192), min_classes=2, max_count=0.8)
+print('**************************************************************\n')
 
 train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -87,6 +104,7 @@ def iterate(ep, mode):
     num_samples = 0
     run_loss = 0.
     run_acc = 0.
+    run_acc_alias = {1: 0., 2: 0., 3: 0., 4: 0., 5: 0.}
 
     monitor = tqdm(loader, desc=mode)
     for sar, lbl in monitor:
@@ -99,16 +117,32 @@ def iterate(ep, mode):
 
         num_samples += lbl.size(0)
         run_loss += loss.item() * lbl.size(0)
-        run_acc += ((seg == lbl).sum().item() / (lbl.size(1) * lbl.size(2)))
+
+        # TODO: detach and cpu to free cuda memory if needed
+        mapping = (seg == lbl)
+        run_acc += (mapping.sum().item() / (lbl.size(1) * lbl.size(2)))
+
+        for alias in torch.unique(lbl).detach().cpu().tolist():
+            mapping_alias = (lbl == alias)
+            # noinspection PyUnresolvedReferences
+            run_acc_alias[alias] += ((mapping & mapping_alias).sum().item() / mapping_alias.sum().item()) * lbl.size(0)
 
         if mode == 'train':
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-        monitor.set_postfix(ep=ep, loss=run_loss / num_samples, acc=run_acc / num_samples)
+        monitor.set_postfix(ep=ep, loss=run_loss / num_samples, acc=run_acc / num_samples,
+                            c21=run_acc_alias[1] / num_samples, c31=run_acc_alias[2] / num_samples,
+                            c41=run_acc_alias[3] / num_samples, c51=run_acc_alias[4] / num_samples)
 
     scheduler.step()
+
+    # ### LOGGING ###
+    logging.info(f'{mode.upper():5} | loss {(run_loss / num_samples):7.5f}, acc {(run_acc / num_samples):7.5f}, '
+                 f'c21 {(run_acc_alias[1] / num_samples):7.5f}, c31 {(run_acc_alias[2] / num_samples):7.5f}, '
+                 f'c41 {(run_acc_alias[3] / num_samples):7.5f}, c51 {(run_acc_alias[4] / num_samples):7.5f}')
+    # ### LOGGING ###
 
     return run_acc / num_samples
 
@@ -117,11 +151,26 @@ if __name__ == "__main__":
     best_acc = 0.
     best_ep = -1
     for epoch in range(num_epochs):
+        # ### LOGGING ###
+        logging.info(f'Epoch {epoch:03} '.ljust(log_pad, '-'))
+        # ### LOGGING ###
+
         accuracy = iterate(epoch, 'train')
         tqdm.write(f'Train | Epoch {epoch} | Accuracy {accuracy}')
         with torch.no_grad():
             accuracy = iterate(epoch, 'valid')
             if accuracy >= best_acc:
+                # ### LOGGING ###
+                logging.info(f'New best valid acc at {accuracy:7.5f}')
+                # logging.info('Saving model parameters ...')
+                # ### LOGGING ###
+
                 best_acc = accuracy
                 best_ep = epoch
             tqdm.write(f'Valid | Epoch {epoch} | Accuracy {accuracy} | Best Accuracy {best_acc} | Best Epoch {best_ep}')
+
+    # ### LOGGING ###
+    logging.info(f'\nTrain {maps[train_map]} | Valid {maps[valid_map]}')
+    logging.info(f'Best valid acc {best_acc:7.5f} at epoch {best_ep}')
+    # logging.info('Saving model parameters ...')
+    # ### LOGGING ###
