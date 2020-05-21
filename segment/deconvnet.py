@@ -170,6 +170,7 @@ class DeconvNet(nn.Module):
         self.score = nn.Conv2d(64, num_classes, kernel_size=1)
 
     def forward(self, x):
+
         # convs
         x = self.conv1(x)
         x, idx1 = self.pool1(x)
@@ -189,6 +190,7 @@ class DeconvNet(nn.Module):
         x = self.deconv6(x)
         x = self.unpool5(x, indices=idx5)
         x = self.deconv5(x)
+
         x = self.unpool4(x, indices=idx4)
         x = self.deconv4(x)
         x = self.unpool3(x, indices=idx3)

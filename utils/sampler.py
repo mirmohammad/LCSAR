@@ -3,6 +3,8 @@ import time
 import multiprocessing as mlt
 from collections import Counter
 
+from utils.misc import bcolors
+
 import numpy as np
 from PIL import Image
 
@@ -19,7 +21,7 @@ class SarSampler:
         self.min_classes = min_classes  # minimum number of classes
         self.count_thr = int((self.kh * self.kw) * max_count)  # maximum number of pixels of each class
 
-        print(f'\nLoading image {lbl_file} ', end='...')
+        print(f'\nLoading image {bcolors.WARNING}{lbl_file}{bcolors.ENDC} ', end='...')
         start_time = time.time()
 
         # Much faster compared to default int
@@ -49,11 +51,13 @@ class SarSampler:
                 class_count.append((m_class, m_count))
 
         print(f' Done in {(time.time() - start_time):.1f}s')
-        print(f'Total number of crops: {crops.shape[0]}')
+        print(f'{bcolors.OKGREEN}Total number of crops: {crops.shape[0]}{bcolors.ENDC}')
         print(f'#crops per #classes: {Counter(map(lambda x: x[0].size, class_count))}')
 
         print('\nFiltering crops', end='...')
         start_time = time.time()
+
+        global_count = {21: 0., 31: 0., 41: 0., 51: 0., 0: 0., 25: 0.}
 
         self.selected = list()
         # Filter out crops with conditions evaluated using m_select function
@@ -63,9 +67,15 @@ class SarSampler:
             if self.min_classes > 1:
                 if m_class.size >= self.min_classes and (m_class != 0).all() and (m_count <= self.count_thr).all():
                     self.selected.append({"crop": crops[i], "classes": m_class, "pixels": m_count})
+                    for m, c in zip(m_class, m_count):
+                        global_count[m] += c
             else:
                 if (m_class != 0).all():
                     self.selected.append({"crop": crops[i], "classes": m_class, "pixels": m_count})
+                    for m, c in zip(m_class, m_count):
+                        global_count[m] += c
+
+        global_count.update((x, y / 1000000) for x, y in global_count.items())
 
         # new params for multiprocessing
         # num_processes = 2
@@ -77,8 +87,10 @@ class SarSampler:
         #             self.selected.append({"crop": crops[i], "classes": m_class, "pixels": m_count})
 
         print(f' Done in {(time.time() - start_time):.1f}s')
-        print(f'Number of selected crops: {len(self.selected)}')
+        print(f'{bcolors.OKGREEN}Number of selected crops: {len(self.selected)}'
+              f' r/: {(len(self.selected) / crops.shape[0]):.3f}{bcolors.ENDC}')
         print(f'#selected per #classes: {Counter(map(lambda x: x["classes"].size, self.selected))}')
+        print(f'{bcolors.OKBLUE}#pixels per class: {global_count}{bcolors.ENDC}')
 
     def m_unique(self, m_crop):
         return \

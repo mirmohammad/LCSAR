@@ -62,3 +62,35 @@ class SAR(data.Dataset):
             lbl = self.transform(lbl)
 
         return sar, lbl
+
+
+# Multi SAR dataset
+class MSAR(data.Dataset):
+    def __init__(self, root_dir, maps, train=True, kernel=(224, 224), stride=(224, 224), min_classes=2, max_count=0.8):
+        assert 'train' in maps if train else 'valid' in maps, 'argument "maps" must contain either train or valid pairs'
+
+        maps = maps['train' if train else 'valid']
+        maps = [SAR(os.path.join(root_dir, x), kernel, stride, min_classes, max_count) for x in maps]
+
+        self.lens = [len(x) for x in maps]
+        self.rngs = []
+
+        left = 0
+        rngs = []
+        for x in maps:
+            rngs.append(range(left, left + len(x)))
+            left = left + len(x)
+
+        self.rngs = rngs
+        self.maps = maps
+
+        print(f'\n === Total {sum(self.lens)} in {self.lens} as {self.rngs} ===')
+
+    def __len__(self):
+        return sum(self.lens)
+
+    def __getitem__(self, idx):
+        for i, r in enumerate(self.rngs):
+            if idx in r:
+                idx = idx - sum(self.lens[0:i])
+                return self.maps[i].__getitem__(idx)

@@ -7,12 +7,12 @@ import torch.nn as nn
 from torch.utils import data
 from tqdm import tqdm
 
-from data import SAR
+from data import SAR, MSAR
 from segment import DeconvNet
 
 parser = argparse.ArgumentParser(description='DeepSAR | Land Classification for SAR imagery using Deep Learning')
 parser.add_argument('dir', help='path to directory containing SAR raster directories')
-parser.add_argument('--log_dir', required=True, help='path to directory to store the results')
+parser.add_argument('-o', '--log_dir', required=True, help='path to directory to store the results')
 # parser.add_argument('--load_dir', default='', help='path to pre-trained model parameters')
 parser.add_argument('--batch_size', default=16, type=int, help='batch size')
 parser.add_argument('--num_workers', default=4, type=int, help='number of dataloader workers')
@@ -22,8 +22,8 @@ parser.add_argument('--weight_decay', default=5e-4, type=float, help='l2 regular
 parser.add_argument('--scheduler_step_size', default=25, type=int, help='scheduler step size')
 parser.add_argument('--scheduler_gamma', default=0.1, type=float, help='scheduler gamma')
 parser.add_argument('--num_classes', default=6, type=int, help='output dimension')
-parser.add_argument('--train_map', default=0, type=int, help='index of train map')
-parser.add_argument('--valid_map', default=4, type=int, help='index of valid map')
+parser.add_argument('-t', '--train_maps', nargs='+', type=int, help='indices of train maps')
+parser.add_argument('-v', '--valid_maps', nargs='+', type=int, help='indices of valid maps')
 # parser.add_argument('--resize', default=224, type=int, help='resize images in pixels')
 # parser.add_argument('--random_seed', default=42, type=int, help='fix the random seed for reproducibility')
 # parser.add_argument('--normalize_labels', action='store_true', help='zero-one normalization applied to labels')
@@ -43,8 +43,8 @@ weight_decay = args.weight_decay
 scheduler_step_size = args.scheduler_step_size
 scheduler_gamma = args.scheduler_gamma
 num_classes = args.num_classes
-train_map = args.train_map
-valid_map = args.valid_map
+train_maps = args.train_maps
+valid_maps = args.valid_maps
 # resize = args.resize
 # random_seed = args.random_seed
 
@@ -57,14 +57,14 @@ device = torch.device('cuda:0' if cuda else 'cpu')
 tqdm.write('CUDA is not available!' if not cuda else 'CUDA is available!')
 tqdm.write('')
 
-maps = ['Montreal', 'Ottawa', 'Quebec', 'Saskatoon', 'Vancouver']
+maps = ['Montreal', 'Ottawa', 'Quebec', 'Saskatoon', 'Toronto', 'Vancouver']
 
-assert train_map < len(maps), f'Train map index must be between 0 and {len(maps)}'
-assert valid_map < len(maps), f'Valid map index must be between 0 and {len(maps)}'
+assert all(x < len(maps) for x in train_maps), f'Train map index must be between 0 and {len(maps)}'
+assert all(x < len(maps) for x in valid_maps), f'Valid map index must be between 0 and {len(maps)}'
 
 # ### LOGGING ###
 log_pad = 96
-log_file = maps[train_map] + '_' + maps[valid_map] + '.txt'
+log_file = f'{train_maps}_{valid_maps}.txt'
 logging.basicConfig(filename=os.path.join(log_dir, log_file),
                     filemode='w',
                     format='%(asctime)s, %(name)s - %(message)s',
@@ -72,18 +72,31 @@ logging.basicConfig(filename=os.path.join(log_dir, log_file),
                     level=logging.INFO)
 # ### LOGGING ###
 
-train_maps = [maps[train_map]]
-valid_maps = [maps[valid_map]]
+# train_maps = [maps[train_maps]]
+# valid_maps = [maps[valid_maps]]
 
-train_root = os.path.join(root_dir, train_maps[0])
-valid_root = os.path.join(root_dir, valid_maps[0])
+# train_root = os.path.join(root_dir, train_maps[0])
+# valid_root = os.path.join(root_dir, valid_maps[0])
 
-print(f'*** Setting up TRAIN dataset using {maps[train_map]} raster ***')
-train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192), min_classes=1, max_count=0.8)
-print('**************************************************************\n')
-print(f'*** Setting up VALID dataset using {maps[valid_map]} raster ***')
-valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192), min_classes=2, max_count=0.8)
-print('**************************************************************\n')
+maps = {'train': [maps[i] for i in train_maps], 'valid': [maps[i] for i in valid_maps]}
+
+print(f'*** Setting up TRAIN dataset using {train_maps} raster ***')
+train_dataset = MSAR(root_dir=root_dir, maps=maps, train=True,
+                     kernel=(224, 224),
+                     stride=(192, 192),
+                     min_classes=1,
+                     max_count=0.8)
+print('**************************************************************')
+print(f'*** Setting up VALID dataset using {valid_maps} raster ***')
+valid_dataset = MSAR(root_dir=root_dir, maps=maps, train=False,
+                     kernel=(224, 224),
+                     stride=(192, 192),
+                     min_classes=1,
+                     max_count=0.8)
+print('**************************************************************')
+
+# train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192), min_classes=1, max_count=0.8)
+# valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192), min_classes=2, max_count=0.8)
 
 train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -170,7 +183,7 @@ if __name__ == "__main__":
             tqdm.write(f'Valid | Epoch {epoch} | Accuracy {accuracy} | Best Accuracy {best_acc} | Best Epoch {best_ep}')
 
     # ### LOGGING ###
-    logging.info(f'\nTrain {maps[train_map]} | Valid {maps[valid_map]}')
+    logging.info(f'\nTrain {train_maps} | Valid {valid_maps}')
     logging.info(f'Best valid acc {best_acc:7.5f} at epoch {best_ep}')
     # logging.info('Saving model parameters ...')
     # ### LOGGING ###
