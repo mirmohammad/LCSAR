@@ -9,12 +9,13 @@ from tqdm import tqdm
 
 from data import SAR, MSAR
 from segment import DeconvNet
+from segment import SegNet
 
 parser = argparse.ArgumentParser(description='DeepSAR | Land Classification for SAR imagery using Deep Learning')
 parser.add_argument('dir', help='path to directory containing SAR raster directories')
 parser.add_argument('-o', '--log_dir', required=True, help='path to directory to store the results')
 # parser.add_argument('--load_dir', default='', help='path to pre-trained model parameters')
-parser.add_argument('--batch_size', default=16, type=int, help='batch size')
+parser.add_argument('--batch_size', default=32, type=int, help='batch size')
 parser.add_argument('--num_workers', default=4, type=int, help='number of dataloader workers')
 parser.add_argument('--num_epochs', default=100, type=int, help='number of epochs')
 parser.add_argument('--learning_rate', default=1e-3, type=float, help='initial learning rate')
@@ -83,14 +84,14 @@ maps = {'train': [maps[i] for i in train_maps], 'valid': [maps[i] for i in valid
 print(f'*** Setting up TRAIN dataset using {train_maps} raster ***')
 train_dataset = MSAR(root_dir=root_dir, maps=maps, train=True,
                      kernel=(224, 224),
-                     stride=(192, 192),
+                     stride=(220, 220),
                      min_classes=1,
                      max_count=0.8)
 print('**************************************************************')
 print(f'*** Setting up VALID dataset using {valid_maps} raster ***')
 valid_dataset = MSAR(root_dir=root_dir, maps=maps, train=False,
                      kernel=(224, 224),
-                     stride=(192, 192),
+                     stride=(220, 220),
                      min_classes=1,
                      max_count=0.8)
 print('**************************************************************')
@@ -98,10 +99,11 @@ print('**************************************************************')
 # train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192), min_classes=1, max_count=0.8)
 # valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192), min_classes=2, max_count=0.8)
 
-train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+                               drop_last=True)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-model = DeconvNet(num_classes=num_classes).to(device)
+model = SegNet(num_classes=num_classes).to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma)
