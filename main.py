@@ -21,7 +21,7 @@ parser.add_argument('--learning_rate', default=1e-3, type=float, help='initial l
 parser.add_argument('--weight_decay', default=5e-4, type=float, help='l2 regularization factor')
 parser.add_argument('--scheduler_step_size', default=25, type=int, help='scheduler step size')
 parser.add_argument('--scheduler_gamma', default=0.1, type=float, help='scheduler gamma')
-parser.add_argument('--num_classes', default=6, type=int, help='output dimension')
+parser.add_argument('--num_classes', default=4, type=int, help='output dimension')
 parser.add_argument('-t', '--train_maps', nargs='+', type=int, help='indices of train maps')
 parser.add_argument('-v', '--valid_maps', nargs='+', type=int, help='indices of valid maps')
 # parser.add_argument('--resize', default=224, type=int, help='resize images in pixels')
@@ -117,7 +117,9 @@ def iterate(ep, mode):
     num_samples = 0
     run_loss = 0.
     run_acc = 0.
-    run_acc_alias = {1: 0., 2: 0., 3: 0., 4: 0., 5: 0.}
+    run_class_samples = {0: 0., 1: 0., 2: 0., 3: 0.}
+    run_class_correct = {0: 0., 1: 0., 2: 0., 3: 0.}
+    run_class_acc = {0: 0., 1: 0., 2: 0., 3: 0.}
 
     monitor = tqdm(loader, desc=mode)
     for sar, lbl in monitor:
@@ -135,10 +137,11 @@ def iterate(ep, mode):
         mapping = (seg == lbl)
         run_acc += (mapping.sum().item() / (lbl.size(1) * lbl.size(2)))
 
-        for alias in torch.unique(lbl).detach().cpu().tolist():
-            mapping_alias = (lbl == alias)
-            # noinspection PyUnresolvedReferences
-            run_acc_alias[alias] += ((mapping & mapping_alias).sum().item() / mapping_alias.sum().item()) * lbl.size(0)
+        for lbl_class in torch.unique(lbl).detach().cpu().tolist():
+            mapping_alias = (lbl == lbl_class)
+            run_class_samples[lbl_class] += mapping_alias.sum().item()
+            run_class_correct[lbl_class] += (mapping & mapping_alias).sum().item()
+            run_class_acc[lbl_class] = run_class_correct[lbl_class] / run_class_samples[lbl_class]
 
         if mode == 'train':
             optimizer.zero_grad()
@@ -146,15 +149,14 @@ def iterate(ep, mode):
             optimizer.step()
 
         monitor.set_postfix(ep=ep, loss=run_loss / num_samples, acc=run_acc / num_samples,
-                            c21=run_acc_alias[1] / num_samples, c31=run_acc_alias[2] / num_samples,
-                            c41=run_acc_alias[3] / num_samples, c51=run_acc_alias[4] / num_samples)
+                            c21=run_class_acc[0], c31=run_class_acc[1], c41=run_class_acc[2], c51=run_class_acc[3])
 
     scheduler.step()
 
     # ### LOGGING ###
     logging.info(f'{mode.upper():5} | loss {(run_loss / num_samples):7.5f}, acc {(run_acc / num_samples):7.5f}, '
-                 f'c21 {(run_acc_alias[1] / num_samples):7.5f}, c31 {(run_acc_alias[2] / num_samples):7.5f}, '
-                 f'c41 {(run_acc_alias[3] / num_samples):7.5f}, c51 {(run_acc_alias[4] / num_samples):7.5f}')
+                 f'c21 {(run_class_acc[0]):7.5f}, c31 {(run_class_acc[1]):7.5f}, '
+                 f'c41 {(run_class_acc[2]):7.5f}, c51 {(run_class_acc[3]):7.5f}')
     # ### LOGGING ###
 
     return run_acc / num_samples

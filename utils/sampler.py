@@ -70,7 +70,7 @@ class SarSampler:
                     for m, c in zip(m_class, m_count):
                         global_count[m] += c
             else:
-                if (m_class != 0).all():
+                if (m_class != 0).all() and (m_class != 25).all():
                     self.selected.append({"crop": crops[i], "classes": m_class, "pixels": m_count})
                     for m, c in zip(m_class, m_count):
                         global_count[m] += c

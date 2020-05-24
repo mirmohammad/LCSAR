@@ -38,12 +38,13 @@ class SAR(data.Dataset):
         self.sar_tif = np.array(Image.open(self.sar_file))
         self.lbl_tif = np.array(Image.open(self.lbl_file), dtype=np.int8)
 
-        # zero stays zero
-        self.lbl_tif[self.lbl_tif == 21] = 1
-        self.lbl_tif[self.lbl_tif == 31] = 2
-        self.lbl_tif[self.lbl_tif == 41] = 3
-        self.lbl_tif[self.lbl_tif == 51] = 4
-        self.lbl_tif[self.lbl_tif == 25] = 5  # 25 is originally -999 (lossy conversion to int8)
+        # zero no longer stays zero
+        self.lbl_tif[self.lbl_tif == 21] = 0
+        self.lbl_tif[self.lbl_tif == 31] = 1
+        self.lbl_tif[self.lbl_tif == 41] = 2
+        self.lbl_tif[self.lbl_tif == 51] = 3
+        # 25 no longer exists
+        # self.lbl_tif[self.lbl_tif == 25] = 5  # 25 is originally -999 (lossy conversion to int8)
 
         self.transform = transforms.Compose([
             transforms.ToTensor()
