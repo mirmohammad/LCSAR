@@ -8,8 +8,6 @@ from torch.utils import data
 from tqdm import tqdm
 
 from data import SAR, MSAR
-from segment import DeconvNet
-from segment import SegNet
 
 parser = argparse.ArgumentParser(description='DeepSAR | Land Classification for SAR imagery using Deep Learning')
 parser.add_argument('dir', help='path to directory containing SAR raster directories')
@@ -25,7 +23,7 @@ parser.add_argument('--scheduler_gamma', default=0.1, type=float, help='schedule
 parser.add_argument('--num_classes', default=4, type=int, help='output dimension')
 parser.add_argument('-t', '--train_maps', nargs='+', type=int, help='indices of train maps')
 parser.add_argument('-v', '--valid_maps', nargs='+', type=int, help='indices of valid maps')
-parser.add_argument('-k', '--kernel', default=224, type=int, help='sampling kernel size')
+parser.add_argument('-k', '--kernel', default=225, type=int, help='sampling kernel size')
 parser.add_argument('-s', '--stride', default=196, type=int, help='sampling stride size')
 parser.add_argument('--random_seed', default=42, type=int, help='fix the random seed for reproducibility')
 # parser.add_argument('--normalize_labels', action='store_true', help='zero-one normalization applied to labels')
@@ -49,7 +47,7 @@ train_maps = args.train_maps
 valid_maps = args.valid_maps
 kernel = args.kernel
 stride = args.stride
-# random_seed = args.random_seed
+random_seed = args.random_seed
 
 # torch.manual_seed(random_seed)
 # np.random.seed(random_seed)
@@ -104,8 +102,14 @@ print('**************************************************************')
 train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-model = SegNet(num_classes=num_classes).to(device)
 criterion = nn.CrossEntropyLoss()
+
+from segment import DeconvNet
+from segment import SegNet
+from segment import PSPNet
+
+#model = SegNet(num_classes=num_classes).to(device)
+model = PSPNet(50, (1, 2, 3, 6), 0.1, num_classes, 8, True, criterion, pretrained=False).to(device)
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma)
 
@@ -128,13 +132,19 @@ def iterate(ep, mode):
     for sar, lbl in monitor:
         sar, lbl = sar.to(device), lbl.to(device).squeeze()
 
-        outputs = model(sar)
+        if mode == 'train':
+            outputs, main_loss, aux_loss = model(sar, lbl)
+            loss = main_loss + 0.4 * aux_loss  # criterion(outputs, lbl.long())
+        else:
+            outputs, loss = model(sar, lbl)
 
         _, seg = torch.max(outputs.data, 1)
-        loss = criterion(outputs, lbl.long())
+
 
         num_samples += lbl.size(0)
         run_loss += loss.item() * lbl.size(0)
+
+        # import ipdb; ipdb.set_trace()
 
         # TODO: detach and cpu to free cuda memory if needed
         mapping = (seg == lbl)
