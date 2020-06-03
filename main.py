@@ -62,7 +62,7 @@ assert all(x < len(maps) for x in valid_maps), f'Valid map index must be between
 
 # ### LOGGING ###
 log_pad = 96
-log_file = f'{train_maps}_{valid_maps}.txt'
+log_file = f'SegNet_T{train_maps}_V{valid_maps}_K{kernel}_S{stride}_B{batch_size}.txt'
 logging.basicConfig(filename=os.path.join(log_dir, log_file),
                     filemode='w',
                     format='%(asctime)s, %(name)s - %(message)s',
