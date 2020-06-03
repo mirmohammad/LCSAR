@@ -10,9 +10,11 @@ from utils import SarSampler
 
 
 class SAR(data.Dataset):
-    def __init__(self, root_dir, kernel=(224, 224), stride=(224, 224), min_classes=2, max_count=0.8):
+    def __init__(self, root_dir, train=True, kernel=(224, 224), stride=(224, 224), min_classes=2, max_count=0.8):
         assert len(kernel) == 2, 'argument "kernel" must be of size 2'
         assert len(stride) == 2, 'argument "stride" must be of size 2'
+
+        self.train = train
 
         self.kh = kernel[0]
         self.kw = kernel[1]
@@ -62,6 +64,14 @@ class SAR(data.Dataset):
             sar = self.transform(sar)
             lbl = self.transform(lbl)
 
+        # if self.train:
+        #     if random.random() > 0.5:
+        #         sar = torch.flip(sar, dims=[2])
+        #         lbl = torch.flip(lbl, dims=[2])
+        #     if random.random() > 0.5:
+        #         sar = torch.flip(sar, dims=[1])
+        #         lbl = torch.flip(lbl, dims=[1])
+
         return sar, lbl
 
 
@@ -71,7 +81,7 @@ class MSAR(data.Dataset):
         assert 'train' in maps if train else 'valid' in maps, 'argument "maps" must contain either train or valid pairs'
 
         maps = maps['train' if train else 'valid']
-        maps = [SAR(os.path.join(root_dir, x), kernel, stride, min_classes, max_count) for x in maps]
+        maps = [SAR(os.path.join(root_dir, x), train, kernel, stride, min_classes, max_count) for x in maps]
 
         self.lens = [len(x) for x in maps]
         self.rngs = []

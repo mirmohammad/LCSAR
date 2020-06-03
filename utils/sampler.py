@@ -1,12 +1,11 @@
-import time
-
 import multiprocessing as mlt
+import time
 from collections import Counter
-
-from utils.misc import bcolors
 
 import numpy as np
 from PIL import Image
+
+from utils.misc import bcolors
 
 Image.MAX_IMAGE_PIXELS = None
 

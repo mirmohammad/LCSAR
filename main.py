@@ -7,7 +7,8 @@ import torch.nn as nn
 from torch.utils import data
 from tqdm import tqdm
 
-from data import SAR, MSAR
+from data import MSAR
+from segment import SegNet
 
 parser = argparse.ArgumentParser(description='DeepSAR | Land Classification for SAR imagery using Deep Learning')
 parser.add_argument('dir', help='path to directory containing SAR raster directories')
@@ -95,14 +96,11 @@ print('**************************************************************')
 # train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192), min_classes=1, max_count=0.8)
 # valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192), min_classes=2, max_count=0.8)
 
-train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
+train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+                               drop_last=True)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 criterion = nn.CrossEntropyLoss()
-
-from segment import DeconvNet
-from segment import SegNet
-from segment import PSPNet
 
 model = SegNet(num_classes=num_classes).to(device)
 # model = PSPNet(50, (1, 2, 3, 6), 0.1, num_classes, 8, True, criterion, pretrained=False).to(device)
