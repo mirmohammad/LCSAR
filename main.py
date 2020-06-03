@@ -12,7 +12,6 @@ from data import SAR, MSAR
 parser = argparse.ArgumentParser(description='DeepSAR | Land Classification for SAR imagery using Deep Learning')
 parser.add_argument('dir', help='path to directory containing SAR raster directories')
 parser.add_argument('-o', '--log_dir', required=True, help='path to directory to store the results')
-# parser.add_argument('--load_dir', default='', help='path to pre-trained model parameters')
 parser.add_argument('-b', '--batch_size', default=32, type=int, help='batch size')
 parser.add_argument('--num_workers', default=4, type=int, help='number of dataloader workers')
 parser.add_argument('--num_epochs', default=100, type=int, help='number of epochs')
@@ -23,18 +22,15 @@ parser.add_argument('--scheduler_gamma', default=0.1, type=float, help='schedule
 parser.add_argument('--num_classes', default=4, type=int, help='output dimension')
 parser.add_argument('-t', '--train_maps', nargs='+', type=int, help='indices of train maps')
 parser.add_argument('-v', '--valid_maps', nargs='+', type=int, help='indices of valid maps')
-parser.add_argument('-k', '--kernel', default=225, type=int, help='sampling kernel size')
+parser.add_argument('-k', '--kernel', default=224, type=int, help='sampling kernel size')
 parser.add_argument('-s', '--stride', default=196, type=int, help='sampling stride size')
 parser.add_argument('--random_seed', default=42, type=int, help='fix the random seed for reproducibility')
-# parser.add_argument('--normalize_labels', action='store_true', help='zero-one normalization applied to labels')
-# parser.add_argument('--pretrained', action='store_true', help='load pre-trained model from load_dir')
 args = parser.parse_args()
 
 cuda = torch.cuda.is_available()
 
 root_dir = args.dir
 log_dir = args.log_dir
-# load_dir = args.load_dir
 batch_size = args.batch_size
 num_workers = args.num_workers
 num_epochs = args.num_epochs
@@ -99,7 +95,7 @@ print('**************************************************************')
 # train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192), min_classes=1, max_count=0.8)
 # valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192), min_classes=2, max_count=0.8)
 
-train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 criterion = nn.CrossEntropyLoss()
@@ -108,8 +104,8 @@ from segment import DeconvNet
 from segment import SegNet
 from segment import PSPNet
 
-#model = SegNet(num_classes=num_classes).to(device)
-model = PSPNet(50, (1, 2, 3, 6), 0.1, num_classes, 8, True, criterion, pretrained=False).to(device)
+model = SegNet(num_classes=num_classes).to(device)
+# model = PSPNet(50, (1, 2, 3, 6), 0.1, num_classes, 8, True, criterion, pretrained=False).to(device)
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=scheduler_step_size, gamma=scheduler_gamma)
 
@@ -132,14 +128,15 @@ def iterate(ep, mode):
     for sar, lbl in monitor:
         sar, lbl = sar.to(device), lbl.to(device).squeeze()
 
-        if mode == 'train':
-            outputs, main_loss, aux_loss = model(sar, lbl)
-            loss = main_loss + 0.4 * aux_loss  # criterion(outputs, lbl.long())
-        else:
-            outputs, loss = model(sar, lbl)
+        # if mode == 'train':
+        #     outputs, main_loss, aux_loss = model(sar, lbl)
+        #     loss = main_loss + 0.4 * aux_loss  # criterion(outputs, lbl.long())
+        # else:
+        #     outputs, loss = model(sar, lbl)
 
+        outputs = model(sar)
+        loss = criterion(outputs, lbl.long())
         _, seg = torch.max(outputs.data, 1)
-
 
         num_samples += lbl.size(0)
         run_loss += loss.item() * lbl.size(0)
