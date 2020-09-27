@@ -11,13 +11,18 @@ from glob import glob
 Image.MAX_IMAGE_PIXELS = None
 
 root_dir = '/data/Databases/MDA'
-maps = ['Montreal', 'Ottawa', 'Quebec', 'Saskatoon', 'Vancouver']
+maps = ['Montreal', 'Ottawa', 'Quebec', 'Saskatoon', 'Toronto', 'Vancouver']
 
+x = 0
 for m in maps:
     print(m)
-    lbl = os.path.join(root_dir, m, 'lbl', '*.tif')
-    x = np.array(Image.open(sorted(glob(lbl))[0]))
-    print(x.shape)
+    lbl = os.path.join(root_dir, m, 'sar', '*.tif')
+    x += os.path.getsize(sorted(glob(lbl))[0]) / 1e6
+    print(os.path.getsize(sorted(glob(lbl))[0]) / 1e6)
+    # x = np.array(Image.open(sorted(glob(lbl))[0]))
+    # print(x.shape)
+
+print(x)
 
 exit(0)
 

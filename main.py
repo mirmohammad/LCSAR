@@ -1,7 +1,9 @@
 import argparse
 import logging
 import os
+import random
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils import data
@@ -13,6 +15,7 @@ from segment import SegNet
 parser = argparse.ArgumentParser(description='DeepSAR | Land Classification for SAR imagery using Deep Learning')
 parser.add_argument('dir', help='path to directory containing SAR raster directories')
 parser.add_argument('-o', '--log_dir', required=True, help='path to directory to store the results')
+parser.add_argument('-x', '--save', action='store_true', help='save best model parameters')
 parser.add_argument('-b', '--batch_size', default=32, type=int, help='batch size')
 parser.add_argument('--num_workers', default=4, type=int, help='number of dataloader workers')
 parser.add_argument('--num_epochs', default=100, type=int, help='number of epochs')
@@ -24,7 +27,7 @@ parser.add_argument('--num_classes', default=4, type=int, help='output dimension
 parser.add_argument('-t', '--train_maps', nargs='+', type=int, help='indices of train maps')
 parser.add_argument('-v', '--valid_maps', nargs='+', type=int, help='indices of valid maps')
 parser.add_argument('-k', '--kernel', default=224, type=int, help='sampling kernel size')
-parser.add_argument('-s', '--stride', default=196, type=int, help='sampling stride size')
+parser.add_argument('-s', '--stride', default=192, type=int, help='sampling stride size')
 parser.add_argument('--random_seed', default=42, type=int, help='fix the random seed for reproducibility')
 args = parser.parse_args()
 
@@ -32,6 +35,7 @@ cuda = torch.cuda.is_available()
 
 root_dir = args.dir
 log_dir = args.log_dir
+save = args.save
 batch_size = args.batch_size
 num_workers = args.num_workers
 num_epochs = args.num_epochs
@@ -46,8 +50,9 @@ kernel = args.kernel
 stride = args.stride
 random_seed = args.random_seed
 
-# torch.manual_seed(random_seed)
-# np.random.seed(random_seed)
+random.seed(random_seed)
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
 # torch.backends.cudnn.deterministic = True
 # torch.backends.cudnn.benchmark = False
 
@@ -62,7 +67,7 @@ assert all(x < len(maps) for x in valid_maps), f'Valid map index must be between
 
 # ### LOGGING ###
 log_pad = 96
-log_file = f'SegNet_T{train_maps}_V{valid_maps}_K{kernel}_S{stride}_B{batch_size}.txt'
+log_file = f'preliminary_T{train_maps}_V{valid_maps}_K{kernel}_S{stride}_B{batch_size}.txt'
 logging.basicConfig(filename=os.path.join(log_dir, log_file),
                     filemode='w',
                     format='%(asctime)s, %(name)s - %(message)s',
@@ -96,8 +101,7 @@ print('**************************************************************')
 # train_dataset = SAR(root_dir=train_root, kernel=(224, 224), stride=(192, 192), min_classes=1, max_count=0.8)
 # valid_dataset = SAR(root_dir=valid_root, kernel=(224, 224), stride=(192, 192), min_classes=2, max_count=0.8)
 
-train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers,
-                               drop_last=True)
+train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 criterion = nn.CrossEntropyLoss()
@@ -159,7 +163,8 @@ def iterate(ep, mode):
         monitor.set_postfix(ep=ep, loss=run_loss / num_samples, acc=run_acc / num_samples,
                             c21=run_class_acc[0], c31=run_class_acc[1], c41=run_class_acc[2], c51=run_class_acc[3])
 
-    scheduler.step()
+    if mode == 'train':
+        scheduler.step()
 
     # ### LOGGING ###
     logging.info(f'{mode.upper():5} | loss {(run_loss / num_samples):7.5f}, acc {(run_acc / num_samples):7.5f}, '
@@ -167,21 +172,22 @@ def iterate(ep, mode):
                  f'c41 {(run_class_acc[2]):7.5f}, c51 {(run_class_acc[3]):7.5f}')
     # ### LOGGING ###
 
-    return run_acc / num_samples
+    return run_acc / num_samples, run_class_acc
 
 
 if __name__ == "__main__":
     best_acc = 0.
+    best_cls = {0: 0., 1: 0., 2: 0., 3: 0.}
     best_ep = -1
     for epoch in range(num_epochs):
         # ### LOGGING ###
         logging.info(f'Epoch {epoch:03} '.ljust(log_pad, '-'))
         # ### LOGGING ###
 
-        accuracy = iterate(epoch, 'train')
+        accuracy, _ = iterate(epoch, 'train')
         tqdm.write(f'Train | Epoch {epoch} | Accuracy {accuracy}')
         with torch.no_grad():
-            accuracy = iterate(epoch, 'valid')
+            accuracy, accuracies = iterate(epoch, 'valid')
             if accuracy >= best_acc:
                 # ### LOGGING ###
                 logging.info(f'New best valid acc at {accuracy:7.5f}')
@@ -189,11 +195,20 @@ if __name__ == "__main__":
                 # ### LOGGING ###
 
                 best_acc = accuracy
+                best_cls = accuracies
                 best_ep = epoch
+                if save:
+                    torch.save(model.state_dict(), 'params_' + str(best_acc) + '_' + str(best_cls) + '_.pt')
             tqdm.write(f'Valid | Epoch {epoch} | Accuracy {accuracy} | Best Accuracy {best_acc} | Best Epoch {best_ep}')
 
     # ### LOGGING ###
     logging.info(f'\nTrain {train_maps} | Valid {valid_maps}')
     logging.info(f'Best valid acc {best_acc:7.5f} at epoch {best_ep}')
-    # logging.info('Saving model parameters ...')
+    logging.info(f'c21 {(best_cls[0]):7.5f}, c31 {(best_cls[1]):7.5f}, c41 {(best_cls[2]):7.5f}, c51 {(best_cls[3]):7.5f}')
     # ### LOGGING ###
+
+    f = open('results_pair/preliminary_results.txt', 'a')
+    f.write(f'Train {train_maps} | Valid {valid_maps}\n')
+    f.write(f'Best valid acc {best_acc:7.5f} at epoch {best_ep}\n')
+    f.write(f'c21 {(best_cls[0]):7.5f}, c31 {(best_cls[1]):7.5f}, c41 {(best_cls[2]):7.5f}, c51 {(best_cls[3]):7.5f}\n\n')
+    f.close()

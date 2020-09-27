@@ -1,5 +1,7 @@
 dataset/
 logs/
+results_pair
 __pycache__
 .idea/
 
+*.pt
