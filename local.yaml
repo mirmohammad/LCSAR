@@ -1,0 +1,37 @@
+# $ GENERAL $
+# default
+num_classes: 4
+num_workers: 4
+# data & log directories
+data_dir: /media/mir/ml/data/mda
+log_dir: ./logs
+# training
+batch_size: 32
+num_epochs: 100
+# optimizer
+learning_rate: 1.0e-3
+momentum: 0.9
+weight_decay: 5.0e-4
+# lr scheduler
+step: 25
+gamma: 0.1
+# random initialization
+random_seed: 42
+manual_seed: Yes
+
+# $ PROJECT SPECIFIC $
+# train & valid maps
+train_maps:
+  - Montreal
+  - Quebec
+  - Saskatoon
+  - Vancouver
+valid_maps:
+  - Ottawa
+  - Toronto
+# sampling
+kernel: 224
+stride: 192
+# data augmentation
+random_vertical_flip: No
+random_horizontal_flip: No
