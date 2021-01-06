@@ -1,5 +1,7 @@
 # LCSAR
-Land Classification using SAR Imagery
+RADARSAT-2 Synthetic-Aperture Radar Land Cover Segmentation using Deep Convolutional Neural Networks
+
+Accepted: WAAMI2020-ICPR
 
 ## Review
 In this project, we evaluate the performance of state-of-the-art deep learning models on SAR images to performe land classification.

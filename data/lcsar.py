@@ -3,6 +3,7 @@ from glob import glob
 from itertools import accumulate
 
 import numpy as np
+import torch
 from PIL import Image
 from torch.utils import data
 
@@ -10,9 +11,11 @@ Image.MAX_IMAGE_PIXELS = None
 
 
 class LCSAR(data.Dataset):
-    def __init__(self, root_dir, maps, kernel, stride, transform):
+    def __init__(self, root_dir, train, maps, kernel, stride, transform):
         assert len(kernel) == 2, 'argument "kernel" must be of size 2'
         assert len(stride) == 2, 'argument "stride" must be of size 2'
+
+        self.train = train
 
         self.kh = kernel[0]
         self.kw = kernel[1]
@@ -51,6 +54,9 @@ class LCSAR(data.Dataset):
         self.cum_lens = list(accumulate(lens))
         self.ranges = [range(right - left, right) for left, right in zip(lens, self.cum_lens)]
 
+        # T450 V459 with stride=192
+        # T254 V258 with stride=256
+        # self.sar = [np.mean([np.array(Image.open(img)) for img in m[0:5]], axis=0) for m in sar_files]
         self.sar = [np.array(Image.open(img)) for img in sar_files]
 
     def __len__(self):
@@ -67,6 +73,53 @@ class LCSAR(data.Dataset):
                 if self.transform:
                     sar = self.transform(sar)
                     lbl = self.transform(lbl)
+
+                # sar & lbl dims are C x H x W (The correct one)
+                if self.train:
+                    if torch.rand(1) < 0.5:
+                        sar = torch.flip(sar, dims=[-1])
+                        lbl = torch.flip(lbl, dims=[-1])
+                    if torch.rand(1) < 0.5:
+                        sar = torch.flip(sar, dims=[-2])
+                        lbl = torch.flip(lbl, dims=[-2])
+                    x = torch.rand(1)
+                    if x < 0.25:
+                        # Rotation +90
+                        sar = torch.rot90(sar, 1, dims=[-1, -2])
+                        lbl = torch.rot90(lbl, 1, dims=[-1, -2])
+                    elif x < 0.5:
+                        # Rotation -90
+                        sar = torch.rot90(sar, -1, dims=[-1, -2])
+                        lbl = torch.rot90(lbl, -1, dims=[-1, -2])
+                    elif x < 0.75:
+                        # Rotation +180/-180
+                        sar = torch.rot90(sar, 2, dims=[-1, -2])
+                        lbl = torch.rot90(lbl, 2, dims=[-1, -2])
+
+                # sar & lbl dims are C x H x W
+                # if self.train:
+                #     if torch.rand(1) < 0.5:
+                #         # Rotation +90
+                #         x = torch.rand(1)
+                #         if 0 < x < 0.2:
+                #             sar = torch.rot90(sar, 1, dims=[-1, -2])
+                #             lbl = torch.rot90(lbl, 1, dims=[-1, -2])
+                #         # Rotation -90
+                #         elif 0.2 < x < 0.4:
+                #             sar = torch.rot90(sar, -1, dims=[-1, -2])
+                #             lbl = torch.rot90(lbl, -1, dims=[-1, -2])
+                #         # Rotation +180/-180
+                #         elif 0.4 < x < 0.6:
+                #             sar = torch.rot90(sar, 2, dims=[-1, -2])
+                #             lbl = torch.rot90(lbl, 2, dims=[-1, -2])
+                #         # Horizontal
+                #         elif 0.6 < x < 0.8:
+                #             sar = torch.flip(sar, dims=[-1])
+                #             lbl = torch.flip(lbl, dims=[-1])
+                #         # Vertical
+                #         elif 0.8 < x < 1.0:
+                #             sar = torch.flip(sar, dims=[-2])
+                #             lbl = torch.flip(lbl, dims=[-2])
 
                 return sar, lbl
 

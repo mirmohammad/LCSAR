@@ -2,14 +2,14 @@ import argparse
 import logging
 import os
 import random
-import yaml
 
 import numpy as np
 import torch
 import torch.nn as nn
+import yaml
 from torch.utils import data
-from tqdm import tqdm
 from torchvision import transforms
+from tqdm import tqdm
 
 from data import LCSAR
 from segment import SegNet
@@ -68,26 +68,18 @@ tqdm.write('')
 
 log_pad = 96
 if args.log:
-    log_file = f'Horizontal_Flip_T{train_maps}_V{valid_maps}_K{kernel}_S{stride}_B{batch_size}.txt'
+    log_file = f'All_Rotate_Flip_T{train_maps}_V{valid_maps}_K{kernel}_S{stride}_B{batch_size}.txt'
     logging.basicConfig(filename=os.path.join(log_dir, log_file),
                         filemode='w',
                         format='%(asctime)s, %(name)s - %(message)s',
                         datefmt='%D - %H:%M:%S',
                         level=logging.INFO)
 
-train_transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.RandomHorizontalFlip()
-])
-valid_transform = transforms.Compose([
-    transforms.ToTensor()
-])
-
 print(f'*** Setting up TRAIN dataset using {train_maps} raster ***')
-train_dataset = LCSAR(root_dir=data_dir, maps=train_maps, kernel=(kernel, kernel), stride=(stride, stride), transform=train_transform)
+train_dataset = LCSAR(root_dir=data_dir, train=True, maps=train_maps, kernel=(kernel, kernel), stride=(stride, stride), transform=transforms.ToTensor())
 
 print(f'*** Setting up VALID dataset using {valid_maps} raster ***')
-valid_dataset = LCSAR(root_dir=data_dir, maps=valid_maps, kernel=(kernel, kernel), stride=(stride, stride), transform=valid_transform)
+valid_dataset = LCSAR(root_dir=data_dir, train=False, maps=valid_maps, kernel=(224, 224), stride=(192, 192), transform=transforms.ToTensor())
 
 train_loader = data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True)
 valid_loader = data.DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
