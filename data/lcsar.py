@@ -15,6 +15,8 @@ class LCSAR(data.Dataset):
         assert len(kernel) == 2, 'argument "kernel" must be of size 2'
         assert len(stride) == 2, 'argument "stride" must be of size 2'
 
+        self.upsample = torch.nn.Upsample(size=224, mode='bilinear')
+
         self.train = train
 
         self.kh = kernel[0]
@@ -66,16 +68,27 @@ class LCSAR(data.Dataset):
         for i, r in enumerate(self.ranges):
             if idx in r:
                 h, w = self.crops[i][idx - r[0]][0], self.crops[i][idx - r[0]][1]
-                sar = self.sar[i][h: h + self.kh, w: w + self.kw]
-                lbl = self.lbl[i][h: h + self.kh, w: w + self.kw]
+                sar = self.sar[i][h: h + 224, w: w + 224]
+                lbl = self.lbl[i][h: h + 224, w: w + 224]
+
+                if self.train:
+                    scale = (torch.rand(1) / 5) + 1
+                    sar = self.sar[i][h: h + int(224 * scale), w: w + int(224 * scale)]
+                    lbl = self.lbl[i][h: h + int(224 * scale), w: w + int(224 * scale)]
 
                 # NOTE: sar & lbl are numpy arrays not PIL images
                 if self.transform:
                     sar = self.transform(sar)
                     lbl = self.transform(lbl)
 
+                print(sar.unsqueeze(0).size())
+
                 # sar & lbl dims are C x H x W (The correct one)
                 if self.train:
+                    sar = torch.nn.functional.interpolate(sar.unsqueeze(0), size=224)
+                    lbl = torch.nn.functional.interpolate(lbl.unsqueeze(0), size=224)
+                    sar = sar.squeeze(0)
+                    lbl = lbl.squeeze(0)
                     if torch.rand(1) < 0.5:
                         sar = torch.flip(sar, dims=[-1])
                         lbl = torch.flip(lbl, dims=[-1])

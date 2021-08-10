@@ -68,7 +68,7 @@ tqdm.write('')
 
 log_pad = 96
 if args.log:
-    log_file = f'All_Rotate_Flip_T{train_maps}_V{valid_maps}_K{kernel}_S{stride}_B{batch_size}.txt'
+    log_file = f'T{train_maps}_V{valid_maps}_K{kernel}_S{stride}_B{batch_size}.txt'
     logging.basicConfig(filename=os.path.join(log_dir, log_file),
                         filemode='w',
                         format='%(asctime)s, %(name)s - %(message)s',

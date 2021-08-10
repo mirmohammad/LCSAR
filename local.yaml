@@ -30,8 +30,8 @@ valid_maps:
   - Ottawa
   - Toronto
 # sampling
-kernel: 224
-stride: 256
+kernel: 268
+stride: 192
 # data augmentation
 random_vertical_flip: No
 random_horizontal_flip: No
